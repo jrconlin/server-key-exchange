@@ -1,0 +1,47 @@
+0.4-1 - 2011-04-27
+==================
+
+Impacts:
+
+- Ops
+
+Dependencies
+
+- python-services: 1.0-1
+
+Relevant changes:
+
+- 653105: Fixed a dependency version error on SQLAlchemy.
+
+
+0.3-1 - 2011-04-11
+==================
+
+Impacts:
+
+- Ops
+
+Dependencies
+
+- python-services: 1.0-1
+
+Relevant changes:
+
+- 649535 - Accept missing X-KeyExchange-Log values on /report call
+
+
+0.2-1 - 2011-02-10
+==================
+
+Impacts:
+
+- Infrastructure Security
+
+Dependencies
+
+- python-services: 0.2-7
+
+Relevant changes:
+
+- 630868: Define CEF signature values and content for Pake
+- 626663: CEF maxsize + escaping

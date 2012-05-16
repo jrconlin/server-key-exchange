@@ -1,0 +1,6 @@
+include RELEASE.txt
+include README.txt
+recursive-include etc *
+include setup.cfg
+include KeyExchange.spec
+recursive-include keyexchange *.mako
