@@ -40,6 +40,8 @@ import re
 from hashlib import md5
 import time
 import random
+import json
+import sys
 
 from webob.dec import wsgify
 from webob.exc import (HTTPNotModified, HTTPNotFound, HTTPServiceUnavailable,
@@ -87,6 +89,7 @@ class KeyExchangeApp(object):
                 ('Access-Control-Allow-Methods', 
                     ', '.join(['GET',
                         'POST', 
+                        'PUT',
                         'OPTIONS']))]
 
 
@@ -151,7 +154,7 @@ class KeyExchangeApp(object):
     def __call__(self, request):
         if request.method == 'OPTIONS':
             return json_response('',
-            headerlist = self.CORS_Headers);
+                headerlist = self.CORS_HEADERS);
         request.config = self.config
         client_id = request.headers.get('X-KeyExchange-Id')
         method = request.method
@@ -185,7 +188,7 @@ class KeyExchangeApp(object):
             cid = self._get_new_cid(client_id)
             headers = [('X-KeyExchange-Channel', cid),
                        ('Content-Type', 'application/json')]
-            headers.extend(self.CORS_Headers)
+            headers.extend(self.CORS_HEADERS)
             return json_response(cid, headerlist=headers)
 
         elif url == 'report':
@@ -194,11 +197,14 @@ class KeyExchangeApp(object):
             return self.report(request, client_id)
 
         # validating the client id - or registering id #2
+        sys.stderr.write('Here\n');
         channel_content = self._check_client_id(url, client_id, request)
 
         # actions are dispatched in this class
+        sys.stderr.write('calling '+method);
         method = getattr(self, '%s_channel' % method.lower(), None)
         if method is None:
+            sys.stderr.write('not found');
             raise HTTPNotFound()
 
         return method(request, url, channel_content)
@@ -264,7 +270,6 @@ class KeyExchangeApp(object):
         # looking good
         if not self.cache.set(channel_id, content, time=ttl):
             raise HTTPServiceUnavailable()
-
         return content
 
     def _etag(self, data):
@@ -300,7 +305,7 @@ class KeyExchangeApp(object):
                               time=ttl):
             raise HTTPServiceUnavailable()
 
-        return json_response('', etag=etag)
+        return json_response('', etag=etag, headers=self.CORS_HEADERS)
 
     def get_channel(self, request, channel_id, existing_content):
         """Grabs data from channel if available."""
@@ -327,7 +332,8 @@ class KeyExchangeApp(object):
                 self.cache.incr(ckey)
 
         try:
-            return json_response(data, dump=False, etag=etag)
+            return json_response(data, dump=False, etag=etag, 
+                    headers=self.CORS_HEADERS)
         finally:
             # deleting the channel in case we did all GETs
             if deletion:
@@ -378,7 +384,7 @@ class KeyExchangeApp(object):
                             request.environ, self.config,
                             msg=_cid2str(channel_id))
 
-        return json_response('')
+        return json_response('', headers=self.CORS_HEADERS)
 
 
 def make_app(global_conf, **app_conf):
