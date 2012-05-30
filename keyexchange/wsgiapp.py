@@ -42,6 +42,7 @@ import time
 import random
 import json
 import sys
+import copy
 
 from webob.dec import wsgify
 from webob.exc import (HTTPNotModified, HTTPNotFound, HTTPServiceUnavailable,
@@ -86,6 +87,9 @@ class KeyExchangeApp(object):
                         'x-keyexchange-log',
                         'if-match',
                         'if-none-match'])),
+                ('Access-Control-Expose-Headers', 
+                    ', '.join(['etag',
+                        'x-status'])),
                 ('Access-Control-Allow-Methods', 
                     ', '.join(['GET',
                         'POST', 
@@ -153,8 +157,12 @@ class KeyExchangeApp(object):
     @wsgify
     def __call__(self, request):
         if request.method == 'OPTIONS':
+            sys.stderr.write("###OPTIONS: \n");
+            for h in self.CORS_HEADERS:
+                sys.stderr.write("   %s: %s\n" % h);
+            # Trace to see if this is actually setting the headers...
             return json_response('',
-                headerlist = self.CORS_HEADERS);
+                headerlist = copy.deepcopy(self.CORS_HEADERS));
         request.config = self.config
         client_id = request.headers.get('X-KeyExchange-Id')
         method = request.method
@@ -197,14 +205,13 @@ class KeyExchangeApp(object):
             return self.report(request, client_id)
 
         # validating the client id - or registering id #2
-        sys.stderr.write('Here\n');
         channel_content = self._check_client_id(url, client_id, request)
 
         # actions are dispatched in this class
-        sys.stderr.write('calling '+method);
+        sys.stderr.write('calling ' + method + "\n");
         method = getattr(self, '%s_channel' % method.lower(), None)
         if method is None:
-            sys.stderr.write('not found');
+            sys.stderr.write("not found\n");
             raise HTTPNotFound()
 
         return method(request, url, channel_content)
@@ -281,10 +288,12 @@ class KeyExchangeApp(object):
         return etag in getattr(header, 'etags')
 
     def put_channel(self, request, channel_id, existing_content):
+        sys.stderr.write("###Rcv'd PUT \n'" );
         """Append data into channel."""
         ttl, ids, old_data, old_etag = existing_content
 
         data = request.body
+        sys.stderr.write("   body len: %s \n" % len(data));
         etag = self._etag(data)
 
         # check the If-Match header
@@ -299,13 +308,18 @@ class KeyExchangeApp(object):
                 # we will put data in the channel only if it's
                 # empty (== first PUT)
                 if old_data != _EMPTY:
-                    raise HTTPPreconditionFailed(etag=etag)
+                    raise HTTPPreconditionFailed(etag=etag,
+                            headers=copy.deepcopy(self.CORS_HEADERS))
 
         if not self.cache.set(channel_id, (ttl, ids, request.body, etag),
                               time=ttl):
-            raise HTTPServiceUnavailable()
+            raise HTTPServiceUnavailable(headers=
+                    copy.deepcopy(self.CORS_HEADERS))
 
-        return json_response('', etag=etag, headers=self.CORS_HEADERS)
+        sys.stderr.write("### Return success \n");
+
+        return json_response('', etag=etag, 
+                headers=copy.deepcopy(self.CORS_HEADERS))
 
     def get_channel(self, request, channel_id, existing_content):
         """Grabs data from channel if available."""
@@ -314,7 +328,8 @@ class KeyExchangeApp(object):
         # check the If-None-Match header
         if request.if_none_match is not None:
             if self._etag_match(etag, request.if_none_match):
-                raise HTTPNotModified()
+                raise HTTPNotModified(headers=
+                        copy.deepcopy(self.CORS_HEADERS))
 
         # keep the GET counter up-to-date
         # the counter is a separate key
@@ -332,8 +347,10 @@ class KeyExchangeApp(object):
                 self.cache.incr(ckey)
 
         try:
+            import pdb; pdb.set_trace();
+            sys.stderr.write('dumping data: ' + json.dumps(data) + "\n")
             return json_response(data, dump=False, etag=etag, 
-                    headers=self.CORS_HEADERS)
+                    headers=copy.deepcopy(self.CORS_HEADERS))
         finally:
             # deleting the channel in case we did all GETs
             if deletion:
@@ -383,8 +400,8 @@ class KeyExchangeApp(object):
                     log_cef('Could not delete the channel', 5,
                             request.environ, self.config,
                             msg=_cid2str(channel_id))
-
-        return json_response('', headers=self.CORS_HEADERS)
+        return json_response('', 
+                headers=copy.deepcopy(self.CORS_HEADERS))
 
 
 def make_app(global_conf, **app_conf):
